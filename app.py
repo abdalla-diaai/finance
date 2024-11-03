@@ -13,7 +13,18 @@ sql_statements = [
             id INTEGER PRIMARY KEY, 
             user_id INTEGER NOT NULL,
             FOREIGN KEY (user_id) REFERENCES users (id) 
-            );"""]
+            );""",
+    """CREATE TABLE IF NOT EXISTS purchases (
+    id INTEGER PRIMARY KEY,
+    symbol TEXT NOT NULL,
+    shares INTEGER NOT NULL,
+    price TEXT NOT NULL,
+    type TEXT NOT NULL,
+    time datetime default current_timestamp, 
+    user_id INTEGER NOT NULL,
+    FOREIGN KEY (user_id) REFERENCES users (id) 
+    );"""   
+            ]
 
 with sqlite3.connect("finance.db") as db:
         cursor = db.cursor()
@@ -54,9 +65,21 @@ def buy():
     if request.method == "POST":
         stock=request.form.get("symbol")
         shares_number = request.form.get("shares")
-        price = lookup(stock)
-        if price:
-            return render_template("index.html", price=price, shares_number=shares_number)
+        user_id = session["user_id"]
+        quote = lookup(stock)
+        transaction = quote["price"] * int(shares_number)
+        if quote:
+            with sqlite3.connect("finance.db") as db:
+                db.row_factory = sqlite3.Row
+                user_data = db.execute("SELECT * FROM users WHERE id = ?", (user_id, )).fetchall()
+                current_cash = user_data[0]["cash"]
+                if current_cash > transaction:
+                    db.execute("INSERT INTO purchases (symbol, shares, price, user_id, type) VALUES(?, ?, ?, ?, ?)", (quote["name"], shares_number, quote["price"], user_id, "Buy"))
+                    flash(f"Bought!", category="success")
+                    return redirect("/")
+                else:
+                    flash(f"No enough cash!", category="warning")
+                    return render_template("buy.html")
         else:
             return apology("TODO")
     return render_template("buy.html")
@@ -65,7 +88,15 @@ def buy():
 @login_required
 def history():
     """Show history of transactions"""
-    return apology("TODO")
+    user_id = session["user_id"]
+    with sqlite3.connect("finance.db") as db:
+        db.row_factory = sqlite3.Row
+        transactions = db.execute("SELECT * FROM purchases WHERE user_id = ?", (user_id, )).fetchall()
+        if transactions:
+            return render_template("history.html", transactions=transactions)
+        else:
+            flash(f"No transactions!", category="warning")
+            return render_template("history.html")
 
 @app.route("/login", methods=["GET", "POST"])
 def login():
@@ -97,7 +128,7 @@ def login():
         ):
             return apology("invalid username and/or password", 403)
 
-        # Remember which user has logged in4
+        # Remember which user has logged in
         session["user_id"] = rows[0]["id"]
 
         # Redirect user to home page
@@ -123,12 +154,12 @@ def logout():
 def quote():
     """Get stock quote."""
     if request.method == "POST":
-        stock=request.form.get("stock")
+        stock=request.form.get("symbol")
         price = lookup(stock)
         if price:
             return render_template("quoted.html", price=price)
         else:
-            flash(f"Stock symbol does not exist!", category="error")
+            flash(f"Stock symbol does not exist!", category="warning")
     return render_template("quote.html")
 
 @app.route("/register", methods=["GET", "POST"])
@@ -145,7 +176,7 @@ def register():
 
                 flash(f"Successfully registered!", category="success")
             except sqlite3.IntegrityError:
-                flash(f"Username already exists!", category="error")
+                flash(f"Username already exists!", category="warning")
     return render_template("register.html")
 
 @app.route("/sell", methods=["GET", "POST"])
