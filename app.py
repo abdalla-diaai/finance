@@ -10,21 +10,16 @@ app = Flask(__name__)
 
 sql_statements = [ 
     """CREATE TABLE IF NOT EXISTS portfolio (
-            id INTEGER PRIMARY KEY, 
-            user_id INTEGER NOT NULL,
-            FOREIGN KEY (user_id) REFERENCES users (id) 
-            );""",
-    """CREATE TABLE IF NOT EXISTS purchases (
-    id INTEGER PRIMARY KEY,
-    symbol TEXT NOT NULL,
-    shares INTEGER NOT NULL,
-    price TEXT NOT NULL,
-    type TEXT NOT NULL,
-    time datetime default current_timestamp, 
-    user_id INTEGER NOT NULL,
-    FOREIGN KEY (user_id) REFERENCES users (id) 
-    );"""   
-            ]
+        id INTEGER PRIMARY KEY,
+        symbol TEXT NOT NULL,
+        shares INTEGER NOT NULL,
+        price TEXT NOT NULL,
+        type TEXT NOT NULL,
+        time datetime default current_timestamp, 
+        user_id INTEGER NOT NULL,
+        FOREIGN KEY (user_id) REFERENCES users (id) 
+        );"""   
+]
 
 with sqlite3.connect("finance.db") as db:
         cursor = db.cursor()
@@ -52,11 +47,11 @@ def after_request(response):
 @login_required
 def index():
     """Show portfolio of stocks"""
-     # Query database for username
+    user_id = session["user_id"]
     with sqlite3.connect("finance.db") as db:
         db.row_factory = sqlite3.Row
-        user_data = db.execute("SELECT * FROM users WHERE id = (SELECT user_id FROM portfolio)").fetchall()
-    return render_template("index.html", user_data=user_data[0]["cash"])
+        user_data = db.execute("SELECT * FROM users WHERE id = ?", (user_id, )).fetchall()
+        return render_template("index.html", user_data=user_data[0]["cash"])
 
 @app.route("/buy", methods=["GET", "POST"])
 @login_required
@@ -72,9 +67,9 @@ def buy():
             with sqlite3.connect("finance.db") as db:
                 db.row_factory = sqlite3.Row
                 user_data = db.execute("SELECT * FROM users WHERE id = ?", (user_id, )).fetchall()
-                current_cash = user_data[0]["cash"]
-                if current_cash > transaction:
-                    db.execute("INSERT INTO purchases (symbol, shares, price, user_id, type) VALUES(?, ?, ?, ?, ?)", (quote["name"], shares_number, quote["price"], user_id, "Buy"))
+                if user_data[0]["cash"] > transaction:
+                    db.execute("INSERT INTO portfolio (symbol, shares, price, user_id, type) VALUES(?, ?, ?, ?, ?)", (quote["name"], shares_number, quote["price"], user_id, "Buy"))
+                    db.execute("UPDATE users SET cash = cash - ? WHERE id = ?", (transaction, user_id))
                     flash(f"Bought!", category="success")
                     return redirect("/")
                 else:
@@ -91,7 +86,7 @@ def history():
     user_id = session["user_id"]
     with sqlite3.connect("finance.db") as db:
         db.row_factory = sqlite3.Row
-        transactions = db.execute("SELECT * FROM purchases WHERE user_id = ?", (user_id, )).fetchall()
+        transactions = db.execute("SELECT * FROM portfolio WHERE user_id = ?", (user_id, )).fetchall()
         if transactions:
             return render_template("history.html", transactions=transactions)
         else:
@@ -172,9 +167,8 @@ def register():
             # handle error in registration
             try:
                 db.execute("INSERT INTO users (username, hash) VALUES(?, ?)", (username, hash))
-                db.execute("INSERT INTO portfolio (user_id) SELECT id FROM users WHERE username = ?", (username,))
-
                 flash(f"Successfully registered!", category="success")
+                return redirect("/login")
             except sqlite3.IntegrityError:
                 flash(f"Username already exists!", category="warning")
     return render_template("register.html")
@@ -183,4 +177,20 @@ def register():
 @login_required
 def sell():
     """Sell shares of stock"""
-    return apology("TODO")
+    if request.method == "POST":
+        stock=request.form.get("symbol")
+        shares_number = request.form.get("shares")
+        user_id = session["user_id"]
+        quote = lookup(stock)
+        transaction = quote["price"] * int(shares_number)
+        if quote:
+            with sqlite3.connect("finance.db") as db:
+                db.row_factory = sqlite3.Row
+                user_data = db.execute("SELECT * FROM users WHERE id = ?", (user_id, )).fetchall()
+                db.execute("INSERT INTO portfolio (symbol, shares, price, user_id, type) VALUES(?, ?, ?, ?, ?)", (quote["name"], shares_number, quote["price"], user_id, "Sell"))
+                db.execute("UPDATE users SET cash = cash + ? WHERE id = ?", (transaction, user_id))
+                flash(f"Sold!", category="success")
+                return redirect("/")
+        else:
+            return apology("TODO")
+    return render_template("sell.html")
