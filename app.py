@@ -9,13 +9,22 @@ from helpers import apology, login_required, lookup, usd
 app = Flask(__name__)
 
 sql_statements = [ 
-    """CREATE TABLE IF NOT EXISTS portfolio (
+    """CREATE TABLE IF NOT EXISTS transactions (
         id INTEGER PRIMARY KEY,
         symbol TEXT NOT NULL,
+        name TEXT NOT NULL,
         shares INTEGER NOT NULL,
         price TEXT NOT NULL,
         type TEXT NOT NULL,
         time datetime default current_timestamp, 
+        user_id INTEGER NOT NULL,
+        FOREIGN KEY (user_id) REFERENCES users (id) 
+        );""",
+
+        """CREATE TABLE IF NOT EXISTS portfolio (
+        id INTEGER PRIMARY KEY,
+        symbol TEXT NOT NULL UNIQUE,
+        shares INTEGER NOT NULL,
         user_id INTEGER NOT NULL,
         FOREIGN KEY (user_id) REFERENCES users (id) 
         );"""   
@@ -51,6 +60,10 @@ def index():
     with sqlite3.connect("finance.db") as db:
         db.row_factory = sqlite3.Row
         user_data = db.execute("SELECT * FROM users WHERE id = ?", (user_id, )).fetchall()
+        if not user_data:  # If no data is returned
+            flash("User data not found", "error")
+            return redirect("/register")  # Or some other error page
+
         return render_template("index.html", user_data=user_data[0]["cash"])
 
 @app.route("/buy", methods=["GET", "POST"])
@@ -68,7 +81,10 @@ def buy():
                 db.row_factory = sqlite3.Row
                 user_data = db.execute("SELECT * FROM users WHERE id = ?", (user_id, )).fetchall()
                 if user_data[0]["cash"] > transaction:
-                    db.execute("INSERT INTO portfolio (symbol, shares, price, user_id, type) VALUES(?, ?, ?, ?, ?)", (quote["name"], shares_number, quote["price"], user_id, "Buy"))
+                    db.execute("INSERT INTO transactions (symbol, name, shares, price, user_id, type) VALUES(?, ?, ?, ?, ?, ?)", (stock, quote["name"], shares_number, quote["price"], user_id, "Buy"))
+
+                    db.execute("INSERT OR REPLACE INTO portfolio (symbol, shares, user_id) VALUES (?, COALESCE((SELECT shares FROM portfolio WHERE symbol = ? AND user_id = ?), 0) + ?, ?)", (stock, stock, user_id, shares_number, user_id))
+
                     db.execute("UPDATE users SET cash = cash - ? WHERE id = ?", (transaction, user_id))
                     flash(f"Bought!", category="success")
                     return redirect("/")
@@ -86,7 +102,7 @@ def history():
     user_id = session["user_id"]
     with sqlite3.connect("finance.db") as db:
         db.row_factory = sqlite3.Row
-        transactions = db.execute("SELECT * FROM portfolio WHERE user_id = ?", (user_id, )).fetchall()
+        transactions = db.execute("SELECT * FROM transactions WHERE user_id = ?", (user_id, )).fetchall()
         if transactions:
             return render_template("history.html", transactions=transactions)
         else:
@@ -177,6 +193,9 @@ def register():
 @login_required
 def sell():
     """Sell shares of stock"""
+    with sqlite3.connect("finance.db") as db:
+            db.row_factory = sqlite3.Row
+            user_shares = db.execute("SELECT DISTINCT symbol FROM portfolio").fetchall()
     if request.method == "POST":
         stock=request.form.get("symbol")
         shares_number = request.form.get("shares")
@@ -187,10 +206,13 @@ def sell():
             with sqlite3.connect("finance.db") as db:
                 db.row_factory = sqlite3.Row
                 user_data = db.execute("SELECT * FROM users WHERE id = ?", (user_id, )).fetchall()
-                db.execute("INSERT INTO portfolio (symbol, shares, price, user_id, type) VALUES(?, ?, ?, ?, ?)", (quote["name"], shares_number, quote["price"], user_id, "Sell"))
+                db.execute("INSERT INTO transactions (symbol, name, shares, price, user_id, type) VALUES(?, ?, ?, ?, ?, ?)", (stock, quote["name"], shares_number, quote["price"], user_id, "Sell"))
+
+                db.execute("INSERT OR REPLACE INTO portfolio (symbol, shares, user_id) VALUES (?, COALESCE((SELECT shares FROM portfolio WHERE symbol = ? AND user_id = ?), 0) - ?, ?)", (stock, stock, user_id, shares_number, user_id))
+
                 db.execute("UPDATE users SET cash = cash + ? WHERE id = ?", (transaction, user_id))
                 flash(f"Sold!", category="success")
                 return redirect("/")
         else:
             return apology("TODO")
-    return render_template("sell.html")
+    return render_template("sell.html", user_shares=user_shares)
