@@ -74,7 +74,7 @@ def index():
                     "name": owned_shares[i]["symbol"],
                     "number": owned_shares[i]["shares"],
                     "price": current_prices[i],
-                    "total": (owned_shares[i]["shares"] * current_prices[i]),
+                    "total": round((owned_shares[i]["shares"] * current_prices[i]), 2),
                 }
             )
             grand_total += owned_shares[i]["shares"] * current_prices[i]
@@ -83,7 +83,7 @@ def index():
             flash("User data not found", "error")
             return redirect("/register")  # Or some other error page
 
-        return render_template("index.html", cash = cash, current_portfolio = current_portfolio, grand_total = grand_total)
+        return render_template("index.html", cash = round(cash, 2), current_portfolio = current_portfolio, grand_total = round(grand_total, 2))
 
 @app.route("/buy", methods=["GET", "POST"])
 @login_required
@@ -95,7 +95,7 @@ def buy():
         user_id = session["user_id"]
         quote = lookup(stock)
         transaction = quote["price"] * int(shares_number)
-        if quote:
+        if quote and int(shares_number) > 0:
             with sqlite3.connect("finance.db") as db:
                 db.row_factory = sqlite3.Row
                 user_data = db.execute("SELECT * FROM users WHERE id = ?", (user_id, )).fetchall()
@@ -189,7 +189,7 @@ def quote():
         if price:
             return render_template("quoted.html", price=price)
         else:
-            flash(f"Stock symbol does not exist!", category="warning")
+            flash(f"Stock does not exist in database!", category="warning")
     return render_template("quote.html")
 
 @app.route("/register", methods=["GET", "POST"])
@@ -223,7 +223,7 @@ def sell():
         user_id = session["user_id"]
         quote = lookup(stock)
         transaction = quote["price"] * int(shares_number)
-        if quote:
+        if quote and int(shares_number) > 0:
             with sqlite3.connect("finance.db") as db:
                 db.row_factory = sqlite3.Row
                 available_shares = db.execute("SELECT shares FROM portfolio WHERE user_id = ? AND symbol = ?", (user_id, stock)).fetchall()

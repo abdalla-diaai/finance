@@ -21,3 +21,13 @@ nav .navbar-brand .green
 {
     color: #2e944b;
 }
+
+input {
+    margin-block-start: 5px;
+    margin-block-end: 5px;
+}
+
+h2 {
+    margin-block-start: 30px;
+    margin-block-end: 30px;
+}
