@@ -57,14 +57,33 @@ def after_request(response):
 def index():
     """Show portfolio of stocks"""
     user_id = session["user_id"]
+    current_portfolio = []
+    current_prices = []
+    grand_total = 0
     with sqlite3.connect("finance.db") as db:
         db.row_factory = sqlite3.Row
         user_data = db.execute("SELECT * FROM users WHERE id = ?", (user_id, )).fetchall()
+        cash = user_data[0]["cash"]
+        owned_shares = db.execute("SELECT * FROM portfolio WHERE user_id = ?", (user_id, )).fetchall()
+        for i in range(0, len(owned_shares)):
+            current_prices.append(lookup(owned_shares[i]["symbol"])["price"])
+        
+        for i in range(0, len(owned_shares)):
+            current_portfolio.append(
+                {
+                    "name": owned_shares[i]["symbol"],
+                    "number": owned_shares[i]["shares"],
+                    "price": current_prices[i],
+                    "total": (owned_shares[i]["shares"] * current_prices[i]),
+                }
+            )
+            grand_total += owned_shares[i]["shares"] * current_prices[i]
+        grand_total += cash
         if not user_data:  # If no data is returned
             flash("User data not found", "error")
             return redirect("/register")  # Or some other error page
 
-        return render_template("index.html", user_data=user_data[0]["cash"])
+        return render_template("index.html", cash = cash, current_portfolio = current_portfolio, grand_total = grand_total)
 
 @app.route("/buy", methods=["GET", "POST"])
 @login_required
@@ -187,6 +206,8 @@ def register():
                 return redirect("/login")
             except sqlite3.IntegrityError:
                 flash(f"Username already exists!", category="warning")
+                return render_template("register.html")
+        
     return render_template("register.html")
 
 @app.route("/sell", methods=["GET", "POST"])
@@ -205,14 +226,18 @@ def sell():
         if quote:
             with sqlite3.connect("finance.db") as db:
                 db.row_factory = sqlite3.Row
-                user_data = db.execute("SELECT * FROM users WHERE id = ?", (user_id, )).fetchall()
-                db.execute("INSERT INTO transactions (symbol, name, shares, price, user_id, type) VALUES(?, ?, ?, ?, ?, ?)", (stock, quote["name"], shares_number, quote["price"], user_id, "Sell"))
+                available_shares = db.execute("SELECT shares FROM portfolio WHERE user_id = ? AND symbol = ?", (user_id, stock)).fetchall()
+                if int(shares_number) <= available_shares[0][0]:
+                    db.execute("INSERT INTO transactions (symbol, name, shares, price, user_id, type) VALUES(?, ?, ?, ?, ?, ?)", (stock, quote["name"], shares_number, quote["price"], user_id, "Sell"))
 
-                db.execute("INSERT OR REPLACE INTO portfolio (symbol, shares, user_id) VALUES (?, COALESCE((SELECT shares FROM portfolio WHERE symbol = ? AND user_id = ?), 0) - ?, ?)", (stock, stock, user_id, shares_number, user_id))
+                    db.execute("INSERT OR REPLACE INTO portfolio (symbol, shares, user_id) VALUES (?, COALESCE((SELECT shares FROM portfolio WHERE symbol = ? AND user_id = ?), 0) - ?, ?)", (stock, stock, user_id, shares_number, user_id))
 
-                db.execute("UPDATE users SET cash = cash + ? WHERE id = ?", (transaction, user_id))
-                flash(f"Sold!", category="success")
-                return redirect("/")
+                    db.execute("UPDATE users SET cash = cash + ? WHERE id = ?", (transaction, user_id))
+                    flash(f"Sold!", category="success")
+                    return redirect("/")
+                else:
+                    flash(f"Not enough shares! Available shares: {available_shares[0][0]}", category="warning")
+                    return redirect("/sell")
         else:
             return apology("TODO")
     return render_template("sell.html", user_shares=user_shares)

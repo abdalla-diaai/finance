@@ -5,5 +5,40 @@ Home
 {% endblock %}
 
 {% block main %}
-   
+<h2>Current Portfolio</h2>
+<table class="table">
+    <thead>
+        <tr>
+            <th scope="col">Symbol</th>
+            <th scope="col">Shares</th>
+            <th scope="col">Price</th>
+            <th scope="col">Total</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for share in current_portfolio %}
+        <tr>
+            <td>{{ share["name"] }}</td>
+            <td>{{ share["number"] }}</td>
+            <td>{{ share["price"] }}</td>
+            <td>{{ share["total"] }}</td>
+        </tr>
+        {% endfor %}
+        <tr>
+            <td></td>
+            <td></td>
+            <td><b>Available Cash</b></td>
+            <td>{{ cash }}</td>
+
+        </tr>
+        <tr>
+            <td></td>
+            <td></td>
+            <td><b>Grand Total</b></td>
+            <td>{{ grand_total }}</td>
+
+        </tr>
+    </tbody>
+</table>
+
 {% endblock %}

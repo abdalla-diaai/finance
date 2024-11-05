@@ -9,14 +9,20 @@ Buy
 
 <form action="/sell" method="post">
     <div class="mb-3">
-        <select id="symbol" name="symbol">
-            {% for share in user_shares %}
+        <div class="form-group">
+            <select class="form-select mx-auto w-auto" aria-label="Default select example">
+                <option selected>Open this select menu</option>
+                {% for share in user_shares %}
                 <option value="{{ share.symbol }}">{{ share.symbol }}</option>
-            {% endfor %}
-        </select>
+                {% endfor %}
+            </select>
+        </div>
 
-        <input autocomplete="off" autofocus class="form-control mx-auto w-auto" name="shares" placeholder="Shares"
-            type="text">
+        <div class="form-group">
+
+            <input autocomplete="off" autofocus class="form-control mx-auto w-auto" name="shares" placeholder="Shares"
+                type="number">
+        </div>
     </div>
     <button class="btn btn-primary" type="submit">Sell</button>
 </form>
