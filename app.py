@@ -81,7 +81,7 @@ def index():
         grand_total += cash
         if not user_data:  # If no data is returned
             flash("User data not found", "error")
-            return redirect("/register")  # Or some other error page
+            return redirect("/register")  
 
         return render_template("index.html", cash = round(cash, 2), current_portfolio = current_portfolio, grand_total = round(grand_total, 2))
 
@@ -195,6 +195,7 @@ def quote():
 @app.route("/register", methods=["GET", "POST"])
 def register():
     """Register user"""
+    success = False
     if request.method == "POST":
         username = request.form.get("username")
         hash = generate_password_hash(request.form.get("password"))
@@ -202,12 +203,13 @@ def register():
             # handle error in registration
             try:
                 db.execute("INSERT INTO users (username, hash) VALUES(?, ?)", (username, hash))
+                success = True
                 flash(f"Successfully registered!", category="success")
-                return redirect("/login")
+                return render_template("register.html")
+
             except sqlite3.IntegrityError:
                 flash(f"Username already exists!", category="warning")
                 return render_template("register.html")
-        
     return render_template("register.html")
 
 @app.route("/sell", methods=["GET", "POST"])
