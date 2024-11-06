@@ -195,21 +195,28 @@ def quote():
 @app.route("/register", methods=["GET", "POST"])
 def register():
     """Register user"""
-    success = False
     if request.method == "POST":
         username = request.form.get("username")
-        hash = generate_password_hash(request.form.get("password"))
-        with sqlite3.connect("finance.db") as db:
-            # handle error in registration
-            try:
-                db.execute("INSERT INTO users (username, hash) VALUES(?, ?)", (username, hash))
-                success = True
-                flash(f"Successfully registered!", category="success")
-                return render_template("register.html")
+        password1 = request.form.get("password")
+        password2 = request.form.get("confirmation")
+        if username == " " or hash == " ":
+            flash(f"Username and password are required", category="warning")
+            return apology("TODO")
 
-            except sqlite3.IntegrityError:
-                flash(f"Username already exists!", category="warning")
-                return render_template("register.html")
+        elif password1 != password2:
+            flash(f"Password does not match", category="warning")
+            return apology("TODO")
+
+        else:
+            with sqlite3.connect("finance.db") as db:
+                # handle error in registration
+                try:
+                    db.execute("INSERT INTO users (username, hash) VALUES(?, ?)", (username, generate_password_hash(password1)))
+                    flash(f"Successfully registered!", category="success")
+                    return render_template("register.html")
+
+                except sqlite3.IntegrityError:
+                    return apology("TODO")
     return render_template("register.html")
 
 @app.route("/sell", methods=["GET", "POST"])
