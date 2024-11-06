@@ -73,8 +73,8 @@ def index():
                 {
                     "name": owned_shares[i]["symbol"],
                     "number": owned_shares[i]["shares"],
-                    "price": current_prices[i],
-                    "total": round((owned_shares[i]["shares"] * current_prices[i]), 2),
+                    "price": usd(current_prices[i]),
+                    "total": usd((owned_shares[i]["shares"] * current_prices[i])),
                 }
             )
             grand_total += owned_shares[i]["shares"] * current_prices[i]
@@ -83,7 +83,7 @@ def index():
             flash("User data not found", "error")
             return redirect("/register")  
 
-        return render_template("index.html", cash = round(cash, 2), current_portfolio = current_portfolio, grand_total = round(grand_total, 2))
+        return render_template("index.html", cash = usd(cash), current_portfolio = current_portfolio, grand_total = usd(grand_total))
 
 @app.route("/buy", methods=["GET", "POST"])
 @login_required
@@ -91,11 +91,16 @@ def buy():
     """Buy shares of stock"""
     if request.method == "POST":
         stock=request.form.get("symbol")
-        shares_number = request.form.get("shares")
+        try:
+            shares_number = int(request.form.get("shares"))
+        except ValueError:
+            return apology("TODO")
+
         user_id = session["user_id"]
         quote = lookup(stock)
-        transaction = quote["price"] * int(shares_number)
-        if quote and int(shares_number) > 0:
+       
+        if quote and shares_number > 0:
+            transaction = quote["price"] * shares_number
             with sqlite3.connect("finance.db") as db:
                 db.row_factory = sqlite3.Row
                 user_data = db.execute("SELECT * FROM users WHERE id = ?", (user_id, )).fetchall()
@@ -109,7 +114,7 @@ def buy():
                     return redirect("/")
                 else:
                     flash(f"No enough cash!", category="warning")
-                    return render_template("buy.html")
+                    return apology("TODO")
         else:
             return apology("TODO")
     return render_template("buy.html")
@@ -122,8 +127,19 @@ def history():
     with sqlite3.connect("finance.db") as db:
         db.row_factory = sqlite3.Row
         transactions = db.execute("SELECT * FROM transactions WHERE user_id = ?", (user_id, )).fetchall()
+        history = []
         if transactions:
-            return render_template("history.html", transactions=transactions)
+            for i in range(0, len(transactions)):
+                history.append(
+                    {
+                        "symbol": transactions[i]["symbol"],
+                        "number": transactions[i]["shares"],
+                        "price": usd(float(transactions[i]["price"])),
+                        "type": (transactions[i]["type"]),
+                        "time": (transactions[i]["time"]),
+                    }
+                )
+            return render_template("history.html", transactions=history)
         else:
             flash(f"No transactions!", category="warning")
             return render_template("history.html")
@@ -185,11 +201,12 @@ def quote():
     """Get stock quote."""
     if request.method == "POST":
         stock=request.form.get("symbol")
-        price = lookup(stock)
-        if price:
-            return render_template("quoted.html", price=price)
+        stock_info = lookup(stock)
+        if stock_info:
+            return render_template("quoted.html", stock_info=stock_info, price = usd(int(stock_info["price"])))
         else:
             flash(f"Stock does not exist in database!", category="warning")
+            return apology("TODO")
     return render_template("quote.html")
 
 @app.route("/register", methods=["GET", "POST"])
@@ -199,16 +216,13 @@ def register():
         username = request.form.get("username")
         password1 = request.form.get("password")
         password2 = request.form.get("confirmation")
-        if username == " " or hash == " ":
-            flash(f"Username and password are required", category="warning")
+        if not username or not password1 or not password2:
+            flash(f"Empty fields!", category="error")
             return apology("TODO")
-
-        elif password1 != password2:
-            flash(f"Password does not match", category="warning")
+        if password1 != password2:
+            flash(f"Passwords do not match!", category="error")
             return apology("TODO")
-
-        else:
-            with sqlite3.connect("finance.db") as db:
+        with sqlite3.connect("finance.db") as db:
                 # handle error in registration
                 try:
                     db.execute("INSERT INTO users (username, hash) VALUES(?, ?)", (username, generate_password_hash(password1)))
@@ -217,6 +231,7 @@ def register():
 
                 except sqlite3.IntegrityError:
                     return apology("TODO")
+            
     return render_template("register.html")
 
 @app.route("/sell", methods=["GET", "POST"])
@@ -228,15 +243,19 @@ def sell():
             user_shares = db.execute("SELECT DISTINCT symbol FROM portfolio").fetchall()
     if request.method == "POST":
         stock=request.form.get("symbol")
-        shares_number = request.form.get("shares")
+        try:
+            shares_number = int(request.form.get("shares"))
+        except ValueError:
+            return apology("TODO")
+
         user_id = session["user_id"]
         quote = lookup(stock)
-        transaction = quote["price"] * int(shares_number)
-        if quote and int(shares_number) > 0:
+        transaction = quote["price"] * shares_number
+        if quote and shares_number > 0:
             with sqlite3.connect("finance.db") as db:
                 db.row_factory = sqlite3.Row
                 available_shares = db.execute("SELECT shares FROM portfolio WHERE user_id = ? AND symbol = ?", (user_id, stock)).fetchall()
-                if int(shares_number) <= available_shares[0][0]:
+                if shares_number <= available_shares[0][0]:
                     db.execute("INSERT INTO transactions (symbol, name, shares, price, user_id, type) VALUES(?, ?, ?, ?, ?, ?)", (stock, quote["name"], shares_number, quote["price"], user_id, "Sell"))
 
                     db.execute("INSERT OR REPLACE INTO portfolio (symbol, shares, user_id) VALUES (?, COALESCE((SELECT shares FROM portfolio WHERE symbol = ? AND user_id = ?), 0) - ?, ?)", (stock, stock, user_id, shares_number, user_id))
@@ -246,7 +265,7 @@ def sell():
                     return redirect("/")
                 else:
                     flash(f"Not enough shares! Available shares: {available_shares[0][0]}", category="warning")
-                    return redirect("/sell")
+                    return apology("TODO")
         else:
             return apology("TODO")
     return render_template("sell.html", user_shares=user_shares)

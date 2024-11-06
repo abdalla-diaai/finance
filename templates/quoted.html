@@ -5,7 +5,7 @@
 {% endblock %}
 
 {% block main %}
-<h2>Current Price of {{ price.symbol }} per Share</h2>
+<h2>Current Price of {{ stock_info.symbol }} per Share</h2>
     <table class="table">
         <thead>
           <tr>
@@ -17,9 +17,9 @@
         </thead>
         <tbody>
           <tr>
-            <td>{{ price.symbol}}</td>
-            <td>{{ price.name }}</td>
-            <td>{{ price.price }}</td>
+            <td>{{ stock_info.symbol}}</td>
+            <td>{{ stock_info.name }}</td>
+            <td>{{ price }}</td>
             <td>
               <form action="/buy" method="get">
               <button class="btn btn-primary"  type="submit">Buy</button>
